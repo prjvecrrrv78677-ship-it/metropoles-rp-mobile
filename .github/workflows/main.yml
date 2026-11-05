@@ -1,4 +1,4 @@
-name: Gerar APK Android
+name: Gerar APK METROPOLES RP
 
 on:
   workflow_dispatch:
@@ -6,22 +6,97 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
-      - name: Baixar arquivos
+      - name: Baixar projeto
         uses: actions/checkout@v4
 
-      - name: Instalar ferramentas
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip wget openjdk-17-jdk
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      - name: Preparar projeto
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar SDK Android
+        run: |
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          yes | sdkmanager --licenses
+
+      - name: Baixar Godot 4.3
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip
+          unzip -q Godot_v4.3-stable_linux.x86_64.zip
+          chmod +x Godot_v4.3-stable_linux.x86_64
+          sudo mv Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
+
+      - name: Instalar templates Android
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
+          unzip -q Godot_v4.3-stable_export_templates.tpz -d templates
+          cp -r templates/templates/* ~/.local/share/godot/export_templates/4.3.stable/
+
+      - name: Extrair projeto
         run: |
           mkdir game
           unzip -o METROPOLES_RP_MOBILE_MARCO_2.zip -d game
-          find game -name project.godot
-
-      - name: Verificar projeto
-        run: |
           test -f game/project.godot
-          echo "Projeto encontrado!"
+
+      - name: Configurar Android no Godot
+        run: |
+          mkdir -p ~/.config/godot
+          cat > ~/.config/godot/editor_settings-4.tres <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
+
+      - name: Criar configuração Android
+        run: |
+          cat > game/export_presets.cfg <<'EOF'
+          [preset.0]
+          name="Android"
+          platform="Android"
+          runnable=true
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path="build/METROPOLES-RP.apk"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+
+          [preset.0.options]
+          custom_template/debug=""
+          custom_template/release=""
+          gradle_build/use_gradle_build=false
+          architectures/armeabi-v7a=true
+          architectures/arm64-v8a=true
+          package/unique_name="com.metropoles.rp"
+          package/name="METROPOLES RP MOBILE"
+          version/code=1
+          version/name="0.1.0"
+          EOF
+
+      - name: Importar projeto
+        run: |
+          godot --headless --editor --path game --quit
+
+      - name: Gerar APK
+        run: |
+          mkdir -p game/build
+          godot --headless --path game --export-debug "Android" game/build/METROPOLES-RP.apk
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: METROPOLES-RP-APK
+          path: game/build/METROPOLES-RP.apk
+          
